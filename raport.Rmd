@@ -1,0 +1,32 @@
+# Material project - batteries
+```{r setup, echo = F, cache = T}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+```
+
+## Data
+```{r readFile, cache=TRUE}
+mp <- read.csv("data/mp_batteries.csv", header = T) %>% 
+  drop_na(Battery.ID, Battery.Formula) %>%
+  mutate_if(is.numeric, ~replace_na(., 0)) %>%
+  mutate_if(is.character, ~replace_na(., "?"))
+```
+``` {r glace}
+knitr::kable(head(mp, 10))
+```
+``` {r summaries_char}
+mp %>% summarise(n())
+mp %>% select(Battery.Formula:Formula.Discharge) %>% 
+  summarise_all(list(n_distinct)) %>% knitr::kable()
+```
+``` {r summarize_num}
+mp %>% select(Max.Delta.Volume:Stability.Discharge) %>%
+  summarise_all(summary)
+
+mp%>% ggplot(aes(x=Steps)) + geom_histogram(binwidth = 1) +
+  xlim(-1, 5)
+mp %>% ggplot(aes(x=Max.Voltage.Step)) + geom_histogram(binwidth = 1) +
+  xlim(-1, 5)
+```
