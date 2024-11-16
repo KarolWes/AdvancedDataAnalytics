@@ -1,5 +1,8 @@
 # Material project - batteries
-```{r setup, echo = F, cache = T}
+Project realized during Advanced Data Mining course at Poznan University of Technology, Winter Semester 2024/2025.
+Course led by Dariusz Brzeziński PhD. and Witold Taisner M.Sc.
+Prepared by Karol Wesołowski BSE
+```{r setup}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 library(ggplot2)
 library(tidyr)
@@ -7,26 +10,82 @@ library(dplyr)
 ```
 
 ## Data
-```{r readFile, cache=TRUE}
+Data used in this project come from US Department of Energy Materials Project. Original data is collected to help researchers develop new materials for construction, energy production and storage, and improving and testing the existing ones. It is distributed in open access form based on Creative Commons licence.
+For the analysis only a fracture of the dataset will be used, one concerning batteries and their parameters.
+Even though dataset came preprocessed by authors and cleaned, some cleaning operations are executed, to make sure it follows the needed format. Data is read from csv file and saved in a cached variable. Records, that miss `id` and `Formula` columns are omited. In numeric columns, nulls and other missing values are replaced by 0, and in text columns, they are replaced by `"?"` (a string consisting of single question mark). Exeisting in the file headers are kept in the data frame.
+```{r readFile1}
 mp <- read.csv("data/mp_batteries.csv", header = T) %>% 
   drop_na(Battery.ID, Battery.Formula) %>%
   mutate_if(is.numeric, ~replace_na(., 0)) %>%
   mutate_if(is.character, ~replace_na(., "?"))
 ```
+To check, how data is constructed, first couple rows are shown.
 ``` {r glace}
 knitr::kable(head(mp, 10))
 ```
+The dataset consists of 17 columns
+  * Id serves as a unique identifier of the record
+  * Battery Formula, Working Ion, Formula Charge/Discharge are text columns with information about chemical compounds active in the battery
+  * Max Delta Volume is a numeric field defining change in volume per voltage step
+  * Average Voltage is defined per voltage step
+  * Capacity is defined in mAh, Energy in Wh, per unit of mass (gravietric) or volume (volumetric)
+  * Atomic Fraction (Dis)Charge is defined as a fraction of compounds in given state
+  * Stability (Dis)Charge is a decimal point number
+  * Steps is an integer number defining number of stable intermediary steps between fully charged and discharged state
+  * Max voltage Step is maximal absolute difference between two voltage steps.
+  
+For each text fields, number of unique values is counted and the most frequent value is retrieved. The total number of records in the set is also presented.
 ``` {r summaries_char}
-mp %>% summarise(n())
-mp %>% select(Battery.Formula:Formula.Discharge) %>% 
-  summarise_all(list(n_distinct)) %>% knitr::kable()
-```
-``` {r summarize_num}
-mp %>% select(Max.Delta.Volume:Stability.Discharge) %>%
-  summarise_all(summary)
+most_frequent <- function(x) {
+  tbl <- table(x)
+  mode_value <- names(tbl)[which.max(tbl)]
+  mode_value
+}
 
-mp%>% ggplot(aes(x=Steps)) + geom_histogram(binwidth = 1) +
-  xlim(-1, 5)
-mp %>% ggplot(aes(x=Max.Voltage.Step)) + geom_histogram(binwidth = 1) +
-  xlim(-1, 5)
+
+mp %>% summarise(n())
+
+summaryDF <- data.frame(uniqueCount = numeric(), mostFrequent = character(), stringsAsFactors = FALSE)
+
+cols <- mp %>% select(Battery.Formula:Formula.Discharge) %>% colnames()
+
+for (columnName in cols){
+  row <- mp %>% summarise(
+    uniqueCount = n_distinct(across(columnName)),
+    mostFrequent = most_frequent(across(columnName))
+  )
+  summaryDF <- rbind(summaryDF, row)
+}
+rownames(summaryDF) <- cols
+
+summaryDF %>% knitr::kable()
+```
+For numeric fields, basic statistics are calculated. Presented are mean, median, standard deviation and quartiles, as well as minimal and maximal value of each category. As seen, most of the categories has outliers, that should be removed for better results.
+``` {r summarize_num}
+summaryDF <- data.frame(
+  mean_value = numeric(), median_value = numeric(), sd_value = numeric(),
+  '1st. quartile' = numeric(), '3rd. quartile' = numeric(),
+  min_value = numeric(), max_value = numeric(), stringsAsFactors = FALSE
+)
+
+cols <- mp %>% select(Max.Delta.Volume:Stability.Discharge) %>% colnames()
+  
+
+for (columnName in cols){
+  row <- mp %>% summarise(
+    mean_value = mean(.data[[columnName]], na.rm = TRUE),
+    median_value = median(.data[[columnName]], na.rm = T),
+    sd_value = sd(.data[[columnName]], na.rm = TRUE),
+    '1st. quartile' = quantile(.data[[columnName]], 0.25),
+    '3rd. quartile' = quantile(.data[[columnName]], 0.75),
+    min_value = min(.data[[columnName]]),
+    max_value = max(.data[[columnName]])
+  )
+  summaryDF <- rbind(summaryDF, row)
+}
+rownames(summaryDF) <- cols
+
+summaryDF %>% knitr::kable()
+
+
 ```
