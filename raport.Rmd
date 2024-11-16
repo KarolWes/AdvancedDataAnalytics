@@ -7,7 +7,9 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 library(ggplot2)
 library(tidyr)
 library(dplyr)
+library(tibble)
 ```
+## Executive summary
 
 ## Data
 Data used in this project come from US Department of Energy Materials Project. Original data is collected to help researchers develop new materials for construction, energy production and storage, and improving and testing the existing ones. It is distributed in open access form based on Creative Commons licence.
@@ -89,3 +91,72 @@ summaryDF %>% knitr::kable()
 
 
 ```
+## Detailed data analysis
+First step in this detailed analysis will be to determine the outliers in numeric data. The report will present the threshold, calculated as mean plus three times standard deviation, and the number of the values considered as outliers. Please note, that both attributes concerning steps are integer, so the threshold value should be rounded up to the closest value.
+As seen, outliers are present in each attributes, and for some, they make quite a numerous group within the whole population, but never exceeding one hundred examples.
+This knowledge is applied to histograms, generated in next step, to improve their readability. 
+```{r}
+outlier_thresholds <- mp %>% select_if(is.numeric) %>%
+  summarise(across(
+    everything(),
+    list(
+      upperOutlierThreshold = ~ mean(.x, na.rm = TRUE) + 3 * sd(.x, na.rm = TRUE)
+    )
+  )) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "column_name",
+    values_to = "outliers_threshold"
+  )
+outlier_thresholds$column_name <- sub("_.*", "", outlier_thresholds$column_name)
+outlier_thresholds <- outlier_thresholds %>%
+  column_to_rownames(var='column_name')
+
+outliers_count <- mp %>% select_if(is.numeric) %>%
+  summarise(across(
+    everything(),
+    list(outliers = ~ sum(abs(scale(.x)) > 3, na.rm = TRUE))
+  )) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "column_name",
+    values_to = "outliers_threshold"
+  )
+outliers_count$column_name <- sub("_.*", "", outliers_count$column_name)
+outliers_count <- outliers_count %>%
+  column_to_rownames(var='column_name')
+
+summaryDF <- cbind(outlier_thresholds, outliers_count)
+summaryDF %>% knitr::kable()
+```
+
+
+```{r detalied_analysis}
+cols <- mp %>% select(Gravimetric.Capacity:Volumetric.Energy) %>% colnames()
+for (columnName in cols) {
+  graph <- mp %>% ggplot(aes_string(x = columnName)) +
+    geom_histogram(binwidth = 60, fill = 'blue', color = 'black', alpha = 0.7) +
+    labs(title = paste("Histogram of", columnName), x = columnName, y = "Frequency") +
+    theme_minimal()
+  plot(graph)
+}
+
+graph <- mp %>% ggplot(aes(x = Max.Delta.Volume)) +
+  geom_histogram(binwidth = 0.01, fill = 'blue', color = 'black', alpha = 0.7) +
+  labs(title = "Histogram of Max.Delta.Volume", x = 'Max.Delta.Volume', y = "Frequency") +
+  xlim(0, 2) +
+  theme_minimal()
+plot(graph)
+
+cols <- mp %>% select(Atomic.Fraction.Charge:Stability.Discharge) %>% colnames()
+for (columnName in cols) {
+  graph <- mp %>% ggplot(aes_string(x = columnName)) +
+    geom_histogram(binwidth = 0.1, fill = 'blue', color = 'black', alpha = 0.7) +
+    xlim(-0.1,1.5)+
+    labs(title = paste("Histogram of", columnName), x = columnName, y = "Frequency") +
+    theme_minimal()
+  plot(graph)
+}
+```
+
+
