@@ -8,6 +8,7 @@ library(ggplot2)
 library(tidyr)
 library(dplyr)
 library(tibble)
+library(reshape2)
 ```
 ## Executive summary
 
@@ -95,7 +96,7 @@ summaryDF %>% knitr::kable()
 First step in this detailed analysis will be to determine the outliers in numeric data. The report will present the threshold, calculated as mean plus three times standard deviation, and the number of the values considered as outliers. Please note, that both attributes concerning steps are integer, so the threshold value should be rounded up to the closest value.
 As seen, outliers are present in each attributes, and for some, they make quite a numerous group within the whole population, but never exceeding one hundred examples.
 This knowledge is applied to histograms, generated in next step, to improve their readability. 
-```{r}
+```{r outliers}
 outlier_thresholds <- mp %>% select_if(is.numeric) %>%
   summarise(across(
     everything(),
@@ -130,7 +131,8 @@ summaryDF <- cbind(outlier_thresholds, outliers_count)
 summaryDF %>% knitr::kable()
 ```
 
-
+To gain some additional knowledge on the data, histograms for all the numerical fields are presented. As seen they follow a highly skewed normal distribution (meaning they are mostly aligned around median of the set, with said median being shifted to one side of the spectrum, which results in the concentration of examples on one side of the center point, and sparser distribution on the other), with outliers appearing mostly on the upper end of the spectrum.
+In case of first four fields, default range is applied, covering all the case. The rest of the histograms are clipped, removing some very far off outlier cases, that impaired the readability. 
 ```{r detalied_analysis}
 cols <- mp %>% select(Gravimetric.Capacity:Volumetric.Energy) %>% colnames()
 for (columnName in cols) {
@@ -144,7 +146,7 @@ for (columnName in cols) {
 graph <- mp %>% ggplot(aes(x = Max.Delta.Volume)) +
   geom_histogram(binwidth = 0.01, fill = 'blue', color = 'black', alpha = 0.7) +
   labs(title = "Histogram of Max.Delta.Volume", x = 'Max.Delta.Volume', y = "Frequency") +
-  xlim(0, 2) +
+  xlim(-0.1, 2) +
   theme_minimal()
 plot(graph)
 
@@ -159,4 +161,78 @@ for (columnName in cols) {
 }
 ```
 
+## Corelation between data
+To show correlation graphs, it is important to first check the correlation coefficient between the fields. The result is presented on the matrix, with darker colors corresponding to better correlated data. The fields form pairs of highly correlated values (Charge/Discharge pairs, energy, capacity). There can be also observed quite good correlation between energy and capacity. The less obvious pairs exist between energy and voltage, and capacity and atomic fraction discharge, but they are probably related to physics behind battery.
+```{r}
+cor_matrix <- cor(mp %>% select_if(is.numeric), use = "complete.obs", method = "pearson")
 
+cor_matrix_melted <- melt(cor_matrix)
+
+ggplot(data = cor_matrix_melted, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "red", high = "blue", mid = "white", 
+                       midpoint = 0, limit = c(-1, 1), space = "Lab", 
+                       name = "Pearson\nCorrelation") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  coord_fixed() +
+  labs(title = "Correlation Matrix", x = "Fields", y = "Fields")
+```
+Interesting would be also checking the relation between non numerical fields and numerical. Unfortunately only Working.Ion field presents few enough options (10) to convert to factor. 
+Correlation is calculated as eta squared factor, which be definition marks correlation as significant for values higher than 0.14. This means, by the achieved results, that there exists strong correlation between factored value of Working Ion and two of twelve numeric fields in the set, namely Average Voltage and Volumetric Capacity, which is logical from the chemical point of view.
+```{r}
+eta_squared <- function(numeric_col, factor_col) {
+  fit <- aov(numeric_col ~ factor_col)
+  anova <- summary(fit)[[1]]
+  ss_total <- sum(anova$`Sum Sq`)
+  ss_between <- anova$`Sum Sq`[1]
+  eta_sq <- ss_between / ss_total
+  return(eta_sq)
+}
+
+mp$Working.Ion <- as.factor(mp$Working.Ion)
+
+eta_sq_results <- sapply(mp %>% select_if(is.numeric), function(x) eta_squared(x, mp$Working.Ion))
+eta_sq_results <- unlist(eta_sq_results)
+eta_sq_df <- data.frame(
+  Eta_Squared = eta_sq_results
+)
+
+print(eta_sq_df)
+
+```
+Based on eta scored computed above, the two fields, that show good signs of correlation are plotted against factored Ion field. The results are presented using violin plots, with outliers marked in red.
+As seen at the plot of Average Voltage, one can note, that results for alkali metals follow a certain pattern, starting with Lithium (Li) with dense center and long yet thin tails, consisting mostly of outliers. The following ions become more and more uniformly distributed across whole spectrum, with thicker tails and not so clearly visible center line. Alkaline earth metals (here in form of Magnesium and Calcium) follow similar pattern. Additionally one can observe, that the higher the atomic number of an ion, the lower is the median of distribution. Non alkaline metals are clearly distinguishable from alkali, but there is little to none similarity between them.
+In case of Volumetric capacity, the trend of lowering the center is visible only inside alkali metals, with them becoming more densely distributed around the median and losing their upper tail. Clearly distinctive among others are two heaviest metals (Aluminum and Yttrium), which retain notable distribution even very far from median.
+```{r violin_plots}
+mp %>% 
+ggplot(aes(x = Working.Ion, y = Average.Voltage)) +
+  geom_violin(scale = "width", fill="lightblue") +
+  geom_boxplot(width = 0.2, fill = "white", color = "black", outlier.color = "red", outlier.size = 2, alpha = 0.7) +
+  coord_cartesian(ylim = c(-5, 10))+
+  labs(title = "Violin Plot of Working Ion by Average Voltage",
+       x = "Working Ion",
+       y = "Avg. Voltage")+
+  theme_minimal()
+
+mp %>% 
+ggplot(aes(x = Working.Ion, y = Volumetric.Capacity)) +
+  geom_violin(scale = "width", fill="lightblue") +
+  geom_boxplot(width = 0.2, fill = "white", color = "black", outlier.color = "red", outlier.size = 2, alpha = 0.7) +
+  coord_cartesian(ylim = c(-1, 4000))+
+  labs(title = "Violin Plot of Working Ion by Volumetric Capacity",
+       x = "Working Ion",
+       y = "Vol. Capacity")+
+  theme_minimal()
+```
+```{r}
+ggplot(mp, aes(x = Gravimetric.Energy, y = Gravimetric.Capacity)) +
+  geom_point(color = 'blue', alpha = 0.6) +  # Scatter plot points
+  geom_smooth(method = 'lm', col = 'red', se = FALSE) +  # Linear regression line
+  labs(
+    title = paste("Correlation Plot between", "Stability Charge", "and", "Discharge"),
+    x = "Stability Charge",
+    y = "Stability Discharge"
+  ) +
+  theme_minimal()
+```
