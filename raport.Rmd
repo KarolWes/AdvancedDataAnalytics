@@ -9,6 +9,9 @@ library(tidyr)
 library(dplyr)
 library(tibble)
 library(reshape2)
+library(gganimate)
+library(png)
+library(gifski)
 ```
 ## Executive summary
 
@@ -178,6 +181,42 @@ ggplot(data = cor_matrix_melted, aes(x = Var1, y = Var2, fill = value)) +
   coord_fixed() +
   labs(title = "Correlation Matrix", x = "Fields", y = "Fields")
 ```
+The four pair mentioned above are plotted on scatter plots with trend line included. This leads to interesting results. average voltage and energy has good value of correlation and shows it on the graph, which is clearly centered around the trend line. However, after removing outliers (i.e. filtering voltage to values less then 20), the distribution loses its coherence and become more of a conical shape (as shown on the volumetric graph).
+On the other hand atomic fraction discharge mapped against capacity does not present itself so well. First and foremost, it is clearly visible, that the distribution is much denser in certain points on the x axis (discharge fraction). The values in this places rise accordingly, but still present a spectrum rather than single point observation. Other interesting observation is that the point follow more of a quadratic distribution than a linear one.
+```{r corelation_graphs}
+mp  %>% ggplot(aes(x = Average.Voltage, y=Gravimetric.Energy)) +
+  geom_point(color = "blue") +  # Scatter points
+  geom_smooth(method = "lm") +  # Regression line
+  labs(title = "Correlation between Average Voltage and Gravimetric Energy",
+       x = "Avg. Voltage",
+       y = "Gravimetric Energy") +
+  theme_minimal()
+mp %>% filter(Average.Voltage < 20) %>% ggplot(aes(x = Average.Voltage, y=Volumetric.Energy)) +
+  geom_point(color = "blue") +  # Scatter points
+  geom_smooth(method = "lm") +  # Regression line
+  labs(title = "Correlation between Average Voltage and Volumetric Energy",
+       x = "Avg. Voltage",
+       y = "Volumetric Energy") +
+  theme_minimal()
+mp %>% ggplot(aes(x = Atomic.Fraction.Discharge, y=Gravimetric.Capacity)) +
+  geom_point(color = "blue") +  # Scatter points
+  geom_smooth(method = "lm") +  # Regression line
+  labs(title = "Correlation between Atomic Fraction Discharge and Gravimetric Capacity",
+       x = "Atomic Fraction Discharge",
+       y = "Gravimetric Capacity") +
+  theme_minimal()
+```
+```{r pointless_animated_graph}
+anim_plot <- mp %>% ggplot(aes(x = Atomic.Fraction.Discharge, y=Volumetric.Capacity)) +
+  geom_point(color = "blue") +  # Scatter points
+  geom_smooth(method = "lm", se=F) +  # Regression line
+  labs(title = "Correlation between Atomic Fraction Discharge and Volumetric Capacity",
+       x = "Atomic Fraction Discharge",
+       y = "Volumetric Capacity") +
+  theme_minimal()+
+  transition_time(Volumetric.Capacity*100) +
+  ease_aes('linear')
+```
 Interesting would be also checking the relation between non numerical fields and numerical. Unfortunately only Working.Ion field presents few enough options (10) to convert to factor. 
 Correlation is calculated as eta squared factor, which be definition marks correlation as significant for values higher than 0.14. This means, by the achieved results, that there exists strong correlation between factored value of Working Ion and two of twelve numeric fields in the set, namely Average Voltage and Volumetric Capacity, which is logical from the chemical point of view.
 ```{r}
@@ -223,16 +262,5 @@ ggplot(aes(x = Working.Ion, y = Volumetric.Capacity)) +
   labs(title = "Violin Plot of Working Ion by Volumetric Capacity",
        x = "Working Ion",
        y = "Vol. Capacity")+
-  theme_minimal()
-```
-```{r}
-ggplot(mp, aes(x = Gravimetric.Energy, y = Gravimetric.Capacity)) +
-  geom_point(color = 'blue', alpha = 0.6) +  # Scatter plot points
-  geom_smooth(method = 'lm', col = 'red', se = FALSE) +  # Linear regression line
-  labs(
-    title = paste("Correlation Plot between", "Stability Charge", "and", "Discharge"),
-    x = "Stability Charge",
-    y = "Stability Discharge"
-  ) +
   theme_minimal()
 ```
