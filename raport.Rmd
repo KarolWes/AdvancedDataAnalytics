@@ -9,9 +9,7 @@ library(tidyr)
 library(dplyr)
 library(tibble)
 library(reshape2)
-library(gganimate)
-library(png)
-library(gifski)
+library(plotly)
 ```
 ## Executive summary
 
@@ -30,8 +28,8 @@ To check, how data is constructed, first couple rows are shown.
 knitr::kable(head(mp, 10))
 ```
 The dataset consists of 17 columns
-  * Id serves as a unique identifier of the record
-  * Battery Formula, Working Ion, Formula Charge/Discharge are text columns with information about chemical compounds active in the battery
+* Id serves as a unique identifier of the record
+* Battery Formula, Working Ion, Formula Charge/Discharge are text columns with information about chemical compounds active in the battery
   * Max Delta Volume is a numeric field defining change in volume per voltage step
   * Average Voltage is defined per voltage step
   * Capacity is defined in mAh, Energy in Wh, per unit of mass (gravietric) or volume (volumetric)
@@ -205,17 +203,13 @@ mp %>% ggplot(aes(x = Atomic.Fraction.Discharge, y=Gravimetric.Capacity)) +
        x = "Atomic Fraction Discharge",
        y = "Gravimetric Capacity") +
   theme_minimal()
-```
-```{r pointless_animated_graph}
-anim_plot <- mp %>% ggplot(aes(x = Atomic.Fraction.Discharge, y=Volumetric.Capacity)) +
+mp %>% ggplot(aes(x = Atomic.Fraction.Discharge, y=Volumetric.Capacity)) +
   geom_point(color = "blue") +  # Scatter points
   geom_smooth(method = "lm", se=F) +  # Regression line
   labs(title = "Correlation between Atomic Fraction Discharge and Volumetric Capacity",
        x = "Atomic Fraction Discharge",
        y = "Volumetric Capacity") +
-  theme_minimal()+
-  transition_time(Volumetric.Capacity*100) +
-  ease_aes('linear')
+  theme_minimal()
 ```
 Interesting would be also checking the relation between non numerical fields and numerical. Unfortunately only Working.Ion field presents few enough options (10) to convert to factor. 
 Correlation is calculated as eta squared factor, which be definition marks correlation as significant for values higher than 0.14. This means, by the achieved results, that there exists strong correlation between factored value of Working Ion and two of twelve numeric fields in the set, namely Average Voltage and Volumetric Capacity, which is logical from the chemical point of view.
@@ -263,4 +257,22 @@ ggplot(aes(x = Working.Ion, y = Volumetric.Capacity)) +
        x = "Working Ion",
        y = "Vol. Capacity")+
   theme_minimal()
+```
+Additional correlation plot was prepared (Volumetric Capacity x Average Voltage) to check the influence of Working Ion used in the battery on that correlation. As see, some ions are distributed more densely over one point, other presents some logical correlation.
+```{r pointless_animated_graph}
+static_plot <- mp %>% filter(Average.Voltage < 20) %>% 
+  ggplot(aes(x = Average.Voltage, y=Volumetric.Capacity, color=Working.Ion)) +
+  geom_point() +  # Scatter points
+  geom_smooth(method = "lm", se=F) +  # Regression line
+  labs(title = "Correlation between Average Voltage and Volumetric Capacity per Ion",
+       x = "Avg. Voltage",
+       y = "Volumetric Capacity") +
+  theme_minimal()
+
+interactive_plot <- ggplotly(static_plot)
+interactive_plot
+
+```
+
+```{r}
 ```
