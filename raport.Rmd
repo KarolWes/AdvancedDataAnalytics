@@ -1,8 +1,17 @@
-# Material project - batteries
+---
+title: "Batteries - material project report"
+author: "Karol Wesolowski BSE"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+---
 Project realized during Advanced Data Mining course at Poznan University of Technology, Winter Semester 2024/2025.
+
 Course led by Dariusz Brzeziński PhD. and Witold Taisner M.Sc.
-Prepared by Karol Wesołowski BSE
-```{r setup}
+
+
+```{r setup, echo=TRUE, message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 library(ggplot2)
 library(tidyr)
@@ -10,35 +19,51 @@ library(dplyr)
 library(tibble)
 library(reshape2)
 library(plotly)
+library(timechange)
+library(ModelMetrics)
+library(caret)
+
+set.seed(413)
 ```
+
 ## Executive summary
 
 ## Data
 Data used in this project come from US Department of Energy Materials Project. Original data is collected to help researchers develop new materials for construction, energy production and storage, and improving and testing the existing ones. It is distributed in open access form based on Creative Commons licence.
+
 For the analysis only a fracture of the dataset will be used, one concerning batteries and their parameters.
+
 Even though dataset came preprocessed by authors and cleaned, some cleaning operations are executed, to make sure it follows the needed format. Data is read from csv file and saved in a cached variable. Records, that miss `id` and `Formula` columns are omited. In numeric columns, nulls and other missing values are replaced by 0, and in text columns, they are replaced by `"?"` (a string consisting of single question mark). Exeisting in the file headers are kept in the data frame.
+
 ```{r readFile1}
 mp <- read.csv("data/mp_batteries.csv", header = T) %>% 
   drop_na(Battery.ID, Battery.Formula) %>%
   mutate_if(is.numeric, ~replace_na(., 0)) %>%
-  mutate_if(is.character, ~replace_na(., "?"))
+  mutate_if(is.character, ~replace_na(., "?"))%>%
+  column_to_rownames(var="Battery.ID")
+
+mp$Working.Ion <- as.factor(mp$Working.Ion)
 ```
+
 To check, how data is constructed, first couple rows are shown.
+
 ``` {r glace}
 knitr::kable(head(mp, 10))
 ```
-The dataset consists of 17 columns
-* Id serves as a unique identifier of the record
-* Battery Formula, Working Ion, Formula Charge/Discharge are text columns with information about chemical compounds active in the battery
-  * Max Delta Volume is a numeric field defining change in volume per voltage step
-  * Average Voltage is defined per voltage step
-  * Capacity is defined in mAh, Energy in Wh, per unit of mass (gravietric) or volume (volumetric)
-  * Atomic Fraction (Dis)Charge is defined as a fraction of compounds in given state
-  * Stability (Dis)Charge is a decimal point number
-  * Steps is an integer number defining number of stable intermediary steps between fully charged and discharged state
-  * Max voltage Step is maximal absolute difference between two voltage steps.
+
+The dataset consists of 17 columns:
+    *   Id serves as a unique identifier of the record
+    *   Battery Formula, Working Ion, Formula Charge/Discharge are text columns with information about chemical compounds active in the battery
+    *   Max Delta Volume is a numeric field defining change in volume per voltage step
+    * Average Voltage is defined per voltage step
+    * Capacity is defined in mAh, Energy in Wh, per unit of mass (gravietric) or volume (volumetric)
+    * Atomic Fraction (Dis)Charge is defined as a fraction of compounds in given state
+    * Stability (Dis)Charge is a decimal point number
+    * Steps is an integer number defining number of stable intermediary steps between fully charged and discharged state
+    * Max voltage Step is maximal absolute difference between two voltage steps.
   
 For each text fields, number of unique values is counted and the most frequent value is retrieved. The total number of records in the set is also presented.
+
 ``` {r summaries_char}
 most_frequent <- function(x) {
   tbl <- table(x)
@@ -64,7 +89,9 @@ rownames(summaryDF) <- cols
 
 summaryDF %>% knitr::kable()
 ```
+
 For numeric fields, basic statistics are calculated. Presented are mean, median, standard deviation and quartiles, as well as minimal and maximal value of each category. As seen, most of the categories has outliers, that should be removed for better results.
+
 ``` {r summarize_num}
 summaryDF <- data.frame(
   mean_value = numeric(), median_value = numeric(), sd_value = numeric(),
@@ -90,13 +117,15 @@ for (columnName in cols){
 rownames(summaryDF) <- cols
 
 summaryDF %>% knitr::kable()
-
-
 ```
+
 ## Detailed data analysis
 First step in this detailed analysis will be to determine the outliers in numeric data. The report will present the threshold, calculated as mean plus three times standard deviation, and the number of the values considered as outliers. Please note, that both attributes concerning steps are integer, so the threshold value should be rounded up to the closest value.
+
 As seen, outliers are present in each attributes, and for some, they make quite a numerous group within the whole population, but never exceeding one hundred examples.
+
 This knowledge is applied to histograms, generated in next step, to improve their readability. 
+
 ```{r outliers}
 outlier_thresholds <- mp %>% select_if(is.numeric) %>%
   summarise(across(
@@ -133,7 +162,9 @@ summaryDF %>% knitr::kable()
 ```
 
 To gain some additional knowledge on the data, histograms for all the numerical fields are presented. As seen they follow a highly skewed normal distribution (meaning they are mostly aligned around median of the set, with said median being shifted to one side of the spectrum, which results in the concentration of examples on one side of the center point, and sparser distribution on the other), with outliers appearing mostly on the upper end of the spectrum.
+
 In case of first four fields, default range is applied, covering all the case. The rest of the histograms are clipped, removing some very far off outlier cases, that impaired the readability. 
+
 ```{r detalied_analysis}
 cols <- mp %>% select(Gravimetric.Capacity:Volumetric.Energy) %>% colnames()
 for (columnName in cols) {
@@ -164,6 +195,7 @@ for (columnName in cols) {
 
 ## Corelation between data
 To show correlation graphs, it is important to first check the correlation coefficient between the fields. The result is presented on the matrix, with darker colors corresponding to better correlated data. The fields form pairs of highly correlated values (Charge/Discharge pairs, energy, capacity). There can be also observed quite good correlation between energy and capacity. The less obvious pairs exist between energy and voltage, and capacity and atomic fraction discharge, but they are probably related to physics behind battery.
+
 ```{r}
 cor_matrix <- cor(mp %>% select_if(is.numeric), use = "complete.obs", method = "pearson")
 
@@ -179,8 +211,11 @@ ggplot(data = cor_matrix_melted, aes(x = Var1, y = Var2, fill = value)) +
   coord_fixed() +
   labs(title = "Correlation Matrix", x = "Fields", y = "Fields")
 ```
+
 The four pair mentioned above are plotted on scatter plots with trend line included. This leads to interesting results. average voltage and energy has good value of correlation and shows it on the graph, which is clearly centered around the trend line. However, after removing outliers (i.e. filtering voltage to values less then 20), the distribution loses its coherence and become more of a conical shape (as shown on the volumetric graph).
+
 On the other hand atomic fraction discharge mapped against capacity does not present itself so well. First and foremost, it is clearly visible, that the distribution is much denser in certain points on the x axis (discharge fraction). The values in this places rise accordingly, but still present a spectrum rather than single point observation. Other interesting observation is that the point follow more of a quadratic distribution than a linear one.
+
 ```{r corelation_graphs}
 mp  %>% ggplot(aes(x = Average.Voltage, y=Gravimetric.Energy)) +
   geom_point(color = "blue") +  # Scatter points
@@ -211,8 +246,11 @@ mp %>% ggplot(aes(x = Atomic.Fraction.Discharge, y=Volumetric.Capacity)) +
        y = "Volumetric Capacity") +
   theme_minimal()
 ```
+
 Interesting would be also checking the relation between non numerical fields and numerical. Unfortunately only Working.Ion field presents few enough options (10) to convert to factor. 
-Correlation is calculated as eta squared factor, which be definition marks correlation as significant for values higher than 0.14. This means, by the achieved results, that there exists strong correlation between factored value of Working Ion and two of twelve numeric fields in the set, namely Average Voltage and Volumetric Capacity, which is logical from the chemical point of view.
+
+Correlation is calculated as eta squared factor, which be definition marks correlation as significant for values higher than 0.14. This means, by the achieved results, that there exists strong correlation between factored value of working ion and two of twelve numeric fields in the set, namely average voltage and volumetric capacity, which is logical from the chemical point of view.
+
 ```{r}
 eta_squared <- function(numeric_col, factor_col) {
   fit <- aov(numeric_col ~ factor_col)
@@ -223,8 +261,6 @@ eta_squared <- function(numeric_col, factor_col) {
   return(eta_sq)
 }
 
-mp$Working.Ion <- as.factor(mp$Working.Ion)
-
 eta_sq_results <- sapply(mp %>% select_if(is.numeric), function(x) eta_squared(x, mp$Working.Ion))
 eta_sq_results <- unlist(eta_sq_results)
 eta_sq_df <- data.frame(
@@ -234,9 +270,13 @@ eta_sq_df <- data.frame(
 print(eta_sq_df)
 
 ```
+
 Based on eta scored computed above, the two fields, that show good signs of correlation are plotted against factored Ion field. The results are presented using violin plots, with outliers marked in red.
+
 As seen at the plot of Average Voltage, one can note, that results for alkali metals follow a certain pattern, starting with Lithium (Li) with dense center and long yet thin tails, consisting mostly of outliers. The following ions become more and more uniformly distributed across whole spectrum, with thicker tails and not so clearly visible center line. Alkaline earth metals (here in form of Magnesium and Calcium) follow similar pattern. Additionally one can observe, that the higher the atomic number of an ion, the lower is the median of distribution. Non alkaline metals are clearly distinguishable from alkali, but there is little to none similarity between them.
-In case of Volumetric capacity, the trend of lowering the center is visible only inside alkali metals, with them becoming more densely distributed around the median and losing their upper tail. Clearly distinctive among others are two heaviest metals (Aluminum and Yttrium), which retain notable distribution even very far from median.
+
+In case of volumetric capacity, the trend of lowering the center is visible only inside alkali metals, with them becoming more densely distributed around the median and losing their upper tail. Clearly distinctive among others are two heaviest metals (Aluminum and Yttrium), which retain notable distribution even very far from median.
+
 ```{r violin_plots}
 mp %>% 
 ggplot(aes(x = Working.Ion, y = Average.Voltage)) +
@@ -258,7 +298,9 @@ ggplot(aes(x = Working.Ion, y = Volumetric.Capacity)) +
        y = "Vol. Capacity")+
   theme_minimal()
 ```
-Additional correlation plot was prepared (Volumetric Capacity x Average Voltage) to check the influence of Working Ion used in the battery on that correlation. As see, some ions are distributed more densely over one point, other presents some logical correlation.
+
+Additional correlation plot was prepared (volumetric capacity x average voltage) to check the influence of working ion used in the battery on that correlation. As see, some ions are distributed more densely over one point, other presents some logical correlation.
+
 ```{r pointless_animated_graph}
 static_plot <- mp %>% filter(Average.Voltage < 20) %>% 
   ggplot(aes(x = Average.Voltage, y=Volumetric.Capacity, color=Working.Ion)) +
@@ -274,5 +316,59 @@ interactive_plot
 
 ```
 
-```{r}
+## Current trends
+Due to high demand of fast charging, long-lived and highly capacious batteries to power all the devices from phones to electric vehicles research on new battery materials is currently one of the most important. Some of the most popular trends in this area of research include:
+* New ion composition: Next to traditional and current materials used in batteries, like Nickel-Iron, Zinc-Manganese (used in old alkaline batteries) and Lithium-Ion (currently used in phones), new research looks into possibility of using Lithium-Iron-Phosphate combination (in development by Tesla), Silicon anodes (for improved longevity) or Sodium-Ion (cheaper than Lithium and more easily accessible).
+* Solid state batteries - most of the current batteries are semi liquid, but the researchers are interested in fully solid ones, which would offer higher energy density (capacity in relation to mass) and safer.
+* Flow batteries - research that may change how the electric car works, this type of battery is depended on a container full of solvent with charged particles in it. The idea is that after discharging, car may come to a "gas station" and refuel by changing the old solvent with new, and leaving old one for recharging.
+ 
+## Feature prediction
+Based on the data in the set, it is possible to create a machine learning model, that may be used to predict some features of a new type of battery.
+
+To present this possibility, a model is prepared that predicts the used Ion based on the characteristics of battery. First step was to clear the data, by removing unnecessary, text columns. Then division on training and test sets is performed (with probability equal to 0.75, meaning that three quarters of all record will be put into training set). Data is then fit into model, by generating a random forest ("rf" as a method), with ten trees in the forest. Based on the learned model prediction is made and the result is saved as a confusion matrix. 
+
+This matrix was later standardized to percent of correct guesses in each of original categories and is presented as a heatmap. As seen, the model performs fairly well. It tends to favor more common categories (Lithium in particular) and does a poor job on not very numerous classes (like in the case of Potassium and Cesium). But in general, the main diagonal (from left lower corner upward) is covered pretty well. To achieve better results, other method may be used, or the data should resampled beforhand to guarantee uniform distribution of classes.
+
+```{r feature_prediction_preproc, cache=TRUE}
+mp_for_ML <- mp %>% select(-c(Battery.Formula, Formula.Charge, Formula.Discharge)) 
+inTraining <- 
+    createDataPartition(
+        y = mp_for_ML$Working.Ion,
+        p = .75,
+        list = FALSE)
+
+training <- mp_for_ML[ inTraining,]
+testing  <- mp_for_ML[-inTraining,]
+
+ctrl <- trainControl(
+    method = "repeatedcv",
+    number = 2,
+    repeats = 5)
+
+
 ```
+```{r feature_prediction_fitting, cache=T}
+
+fit <- train(Working.Ion ~ .,
+             data = training,
+             method = "rf",
+             trControl = ctrl,
+             ntree = 10)
+```
+```{r feature_prediction_predict}
+rfClasses <- predict(fit, newdata = testing)
+
+cm <- confusionMatrix(rfClasses, testing$Working.Ion)
+cm
+```
+```{r confusion_matrix}
+conf_matrix <- as.matrix(cm$table)
+conf_matrix_percent <- sweep(conf_matrix, 2, colSums(conf_matrix), FUN = "/") * 100
+conf_melt <- melt(conf_matrix_percent)
+conf_melt %>% ggplot(aes(x = Prediction, y = Reference, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(high = "navy", low = "white", name = "Percentage") +
+  labs(x = "Predicted Label", y = "True Label", title = "Confusion Matrix Heatmap") +
+  theme_minimal()
+```
+
