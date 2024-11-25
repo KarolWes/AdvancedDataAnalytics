@@ -11,7 +11,7 @@ Project realized during Advanced Data Mining course at Poznan University of Tech
 Course led by Dariusz Brzeziński PhD. and Witold Taisner M.Sc.
 
 
-```{r setup, echo=TRUE, message=FALSE, warning=FALSE}
+```{r setup, echo=TRUE, message=FALSE, warning=FALSE, cache=T}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 library(ggplot2)
 library(tidyr)
@@ -27,6 +27,20 @@ set.seed(413)
 ```
 
 ## Executive summary
+Energy storage is very important in current times. Batteries are used in every day appliances, such as phones, clocks and headphones. They are also more and more present in transport, being the base of electric vehicles, which become more and more popular. This poses series of tasks ahead of developers, that needs to be met before a battery can be put to use. 
+
+Most important features of the batteries are their ability to recharge and time of said recharge. Capacity is also crucial, but rather in relation to the mass and volume of the battery.
+
+Researcher try to find new composites and compounds, that would allow batteries to be lighter, smaller, more versatile and faster in recharge. 
+
+This project aims to summaries some of the features of existing batteries, their distribution, finding correlation between those attributes, especially in accordance to working ion classification. This classification is at the end used as a goal of prediction model, which may be used to test what was inside a battery based on its characteristics. 
+
+Most important results presents as follow:
+
+* There exists pairs of highly correlated values, which means, that one can be approximated based on the other and so may be omitted in the storage and machine learning model preparation.
+* Supplied data is sufficient to perform quite good prediction of classes, which may be used in real life scenarios.
+* Most of the variables (numerical) are correlated with the class (working ion), co may be predicted based on the class.
+* Beside working ion field, other text fields does not provide valuable information.
 
 ## Data
 Data used in this project come from US Department of Energy Materials Project. Original data is collected to help researchers develop new materials for construction, energy production and storage, and improving and testing the existing ones. It is distributed in open access form based on Creative Commons licence.
@@ -52,15 +66,16 @@ knitr::kable(head(mp, 10))
 ```
 
 The dataset consists of 17 columns:
-    *   Id serves as a unique identifier of the record
-    *   Battery Formula, Working Ion, Formula Charge/Discharge are text columns with information about chemical compounds active in the battery
-    *   Max Delta Volume is a numeric field defining change in volume per voltage step
-    * Average Voltage is defined per voltage step
-    * Capacity is defined in mAh, Energy in Wh, per unit of mass (gravietric) or volume (volumetric)
-    * Atomic Fraction (Dis)Charge is defined as a fraction of compounds in given state
-    * Stability (Dis)Charge is a decimal point number
-    * Steps is an integer number defining number of stable intermediary steps between fully charged and discharged state
-    * Max voltage Step is maximal absolute difference between two voltage steps.
+
+* Id serves as a unique identifier of the record
+* Battery Formula, Working Ion, Formula Charge/Discharge are text columns with information about chemical compounds active in the battery
+* Max Delta Volume is a numeric field defining change in volume per voltage step
+* Average Voltage is defined per voltage step
+* Capacity is defined in mAh, Energy in Wh, per unit of mass (gravietric) or volume (volumetric)
+* Atomic Fraction (Dis)Charge is defined as a fraction of compounds in given state
+* Stability (Dis)Charge is a decimal point number
+* Steps is an integer number defining number of stable intermediary steps between fully charged and discharged state
+* Max voltage Step is maximal absolute difference between two voltage steps.
   
 For each text fields, number of unique values is counted and the most frequent value is retrieved. The total number of records in the set is also presented.
 
@@ -318,6 +333,7 @@ interactive_plot
 
 ## Current trends
 Due to high demand of fast charging, long-lived and highly capacious batteries to power all the devices from phones to electric vehicles research on new battery materials is currently one of the most important. Some of the most popular trends in this area of research include:
+
 * New ion composition: Next to traditional and current materials used in batteries, like Nickel-Iron, Zinc-Manganese (used in old alkaline batteries) and Lithium-Ion (currently used in phones), new research looks into possibility of using Lithium-Iron-Phosphate combination (in development by Tesla), Silicon anodes (for improved longevity) or Sodium-Ion (cheaper than Lithium and more easily accessible).
 * Solid state batteries - most of the current batteries are semi liquid, but the researchers are interested in fully solid ones, which would offer higher energy density (capacity in relation to mass) and safer.
 * Flow batteries - research that may change how the electric car works, this type of battery is depended on a container full of solvent with charged particles in it. The idea is that after discharging, car may come to a "gas station" and refuel by changing the old solvent with new, and leaving old one for recharging.
@@ -326,8 +342,6 @@ Due to high demand of fast charging, long-lived and highly capacious batteries t
 Based on the data in the set, it is possible to create a machine learning model, that may be used to predict some features of a new type of battery.
 
 To present this possibility, a model is prepared that predicts the used Ion based on the characteristics of battery. First step was to clear the data, by removing unnecessary, text columns. Then division on training and test sets is performed (with probability equal to 0.75, meaning that three quarters of all record will be put into training set). Data is then fit into model, by generating a random forest ("rf" as a method), with ten trees in the forest. Based on the learned model prediction is made and the result is saved as a confusion matrix. 
-
-This matrix was later standardized to percent of correct guesses in each of original categories and is presented as a heatmap. As seen, the model performs fairly well. It tends to favor more common categories (Lithium in particular) and does a poor job on not very numerous classes (like in the case of Potassium and Cesium). But in general, the main diagonal (from left lower corner upward) is covered pretty well. To achieve better results, other method may be used, or the data should resampled beforhand to guarantee uniform distribution of classes.
 
 ```{r feature_prediction_preproc, cache=TRUE}
 mp_for_ML <- mp %>% select(-c(Battery.Formula, Formula.Charge, Formula.Discharge)) 
@@ -361,6 +375,8 @@ rfClasses <- predict(fit, newdata = testing)
 cm <- confusionMatrix(rfClasses, testing$Working.Ion)
 cm
 ```
+
+This matrix was later standardized to percent of correct guesses in each of original categories and is presented as a heatmap. As seen, the model performs fairly well. It tends to favor more common categories (Lithium in particular) and does a poor job on not very numerous classes (like in the case of Potassium and Cesium). But in general, the main diagonal (from left lower corner upward) is covered pretty well. To achieve better results, other method may be used, or the data should resampled beforhand to guarantee uniform distribution of classes.
 ```{r confusion_matrix}
 conf_matrix <- as.matrix(cm$table)
 conf_matrix_percent <- sweep(conf_matrix, 2, colSums(conf_matrix), FUN = "/") * 100
